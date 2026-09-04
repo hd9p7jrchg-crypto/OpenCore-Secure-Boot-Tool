@@ -110,8 +110,31 @@ class EfiSigner:
                     progress_callback(f"备份失败：{e}", 0, result.total)
                 # 备份失败不阻止签名，但记录警告
 
+        # 检查密钥文件是否存在
+        if not self.isk_key.exists() or not self.isk_pem.exists():
+            if progress_callback:
+                progress_callback(f"错误：密钥文件不存在！ISK.key={self.isk_key.exists()}, ISK.pem={self.isk_pem.exists()}", 0, result.total)
+                progress_callback("请先在「密钥管理」中生成密钥", 0, result.total)
+            result.failed = result.total
+            for f in files:
+                rel = str(f.relative_to(directory))
+                result.files.append((rel, False, "密钥文件不存在"))
+            return result
+
         isk_key_wsl = win_to_wsl_path(str(self.isk_key))
         isk_pem_wsl = win_to_wsl_path(str(self.isk_pem))
+
+        # 预检：测试 sbsign 是否可用
+        rc_test, out_test, err_test = run_wsl("sbsign --version 2>&1", timeout=10)
+        if rc_test != 0:
+            if progress_callback:
+                progress_callback(f"错误：sbsign 不可用！{out_test}{err_test}", 0, result.total)
+                progress_callback("请在 WSL 中安装 sbsigntool：sudo apt-get install -y sbsigntool", 0, result.total)
+            result.failed = result.total
+            for f in files:
+                rel = str(f.relative_to(directory))
+                result.files.append((rel, False, "sbsign 不可用"))
+            return result
 
         for i, efi_path in enumerate(files, 1):
             rel_path = str(efi_path.relative_to(directory))
@@ -120,13 +143,28 @@ class EfiSigner:
             if progress_callback:
                 progress_callback(f"签名中：{rel_path}", i, result.total)
 
-            # Sign the file
-            sign_cmd = f'sbsign --key "{isk_key_wsl}" --cert "{isk_pem_wsl}" --output "{efi_wsl}" "{efi_wsl}" 2>&1'
+            # 用临时文件签名，再替换原文件（避免 sbsign 不支持同路径覆盖）
+            tmp_wsl = efi_wsl + ".signed"
+            sign_cmd = f'sbsign --key "{isk_key_wsl}" --cert "{isk_pem_wsl}" --output "{tmp_wsl}" "{efi_wsl}" 2>&1'
             rc, out, err = run_wsl(sign_cmd, timeout=30)
 
             if rc != 0:
+                error_detail = (out + err).strip()
                 result.failed += 1
-                result.files.append((rel_path, False, out + err))
+                result.files.append((rel_path, False, error_detail))
+                if progress_callback:
+                    progress_callback(f"  [失败] {rel_path}：{error_detail}", i, result.total)
+                continue
+
+            # 用签名后的文件替换原文件
+            mv_cmd = f'mv -f "{tmp_wsl}" "{efi_wsl}" 2>&1'
+            rc_mv, out_mv, err_mv = run_wsl(mv_cmd, timeout=10)
+            if rc_mv != 0:
+                error_detail = (out_mv + err_mv).strip()
+                result.failed += 1
+                result.files.append((rel_path, False, f"替换文件失败：{error_detail}"))
+                if progress_callback:
+                    progress_callback(f"  [失败] {rel_path}：替换文件失败：{error_detail}", i, result.total)
                 continue
 
             # Verify the signature
@@ -136,9 +174,14 @@ class EfiSigner:
             if rc == 0 and "Signature verification OK" in (out + err):
                 result.signed += 1
                 result.files.append((rel_path, True, "OK"))
+                if progress_callback:
+                    progress_callback(f"  [成功] {rel_path}", i, result.total)
             else:
+                error_detail = (out + err).strip()
                 result.failed += 1
-                result.files.append((rel_path, False, f"验证失败：{out}{err}"))
+                result.files.append((rel_path, False, f"验证失败：{error_detail}"))
+                if progress_callback:
+                    progress_callback(f"  [失败] {rel_path}：验证失败：{error_detail}", i, result.total)
 
         # 签名完成后自动修补 config.plist
         if result.failed == 0 and result.signed > 0:

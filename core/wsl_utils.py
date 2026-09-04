@@ -18,7 +18,11 @@ def win_to_wsl_path(win_path: str | Path) -> str:
     # Replace drive letter: C: -> /mnt/c
     if len(p) >= 2 and p[1] == ":":
         drive = p[0].lower()
-        p = f"/mnt/{drive}{p[2:]}"
+        rest = p[2:]
+        # 确保驱动器号后面有 /
+        if not rest.startswith("/"):
+            rest = "/" + rest
+        p = f"/mnt/{drive}{rest}"
     return p
 
 
