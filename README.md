@@ -321,7 +321,7 @@ python build_exe.py
 ```
 MIT License
 
-Copyright (c) 2026 余生的客栈 (yskz.cn)
+Copyright (c) 2026 余生的客栈 (yskz.cn) @bilibli&余生的客栈
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -348,7 +348,7 @@ SOFTWARE.
 
 - **作者 / Author**: [余生的客栈@bilibili](https://space.bilibili.com/) | [yskz.cn](https://yskz.cn)
 - **技术栈 / Tech Stack**: PyQt6, PyInstaller, WSL, sbsigntool, efitools, OpenSSL
-- **灵感来源 / Inspired by**: [OpenCore](https://github.com/acidanthera/OpenCorePkg) 引导方案 / Boot configuration
+- **灵感来源 / Inspired by**: [OpenCore-and-UEFI-Secure-Boot]([https://github.com/acidanthera/OpenCorePkg](https://github.com/perez987/OpenCore-and-UEFI-Secure-Boot/tree/main)) 
 
 ---
 
